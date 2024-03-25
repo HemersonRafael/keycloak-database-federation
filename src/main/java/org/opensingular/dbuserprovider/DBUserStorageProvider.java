@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream; 
 
 @JBossLog
 public class DBUserStorageProvider implements UserStorageProvider,
@@ -42,9 +43,9 @@ public class DBUserStorageProvider implements UserStorageProvider,
     }
     
     
-    private List<UserModel> toUserModel(RealmModel realm, List<Map<String, String>> users) {
+    private Stream<UserModel> toUserModel(RealmModel realm, List<Map<String, String>> users) {
         return users.stream()
-                    .map(m -> new UserAdapter(session, realm, model, m, allowDatabaseToOverwriteKeycloak)).collect(Collectors.toList());
+                    .map(m -> new UserAdapter(session, realm, model, m, allowDatabaseToOverwriteKeycloak));
     }
     
     
@@ -72,7 +73,7 @@ public class DBUserStorageProvider implements UserStorageProvider,
         UserModel dbUser = user;
         // If the cache just got loaded in the last 500 millisec (i.e. probably part of the actual flow), there is no point in reloading the user.)
         if (allowDatabaseToOverwriteKeycloak && user instanceof CachedUserModel && (System.currentTimeMillis() - ((CachedUserModel) user).getCacheTimestamp()) > 500) {
-          dbUser = this.getUserById(user.getId(), realm);
+          dbUser = this.getUserById( realm, user.getId());
 
           if (dbUser == null) {
             ((CachedUserModel) user).invalidate();
@@ -105,8 +106,8 @@ public class DBUserStorageProvider implements UserStorageProvider,
     }
     
     @Override
-    public Set<String> getDisableableCredentialTypes(RealmModel realm, UserModel user) {
-        return Collections.emptySet();
+    public Stream<String> getDisableableCredentialTypesStream(RealmModel realm, UserModel user) {
+        return Stream.empty();
     }
     
     @Override
@@ -131,9 +132,9 @@ public class DBUserStorageProvider implements UserStorageProvider,
     public void close() {
         log.debugv("closing");
     }
-    
+
     @Override
-    public UserModel getUserById(String id, RealmModel realm) {
+    public UserModel getUserById(RealmModel realm, String id) {
         
         log.infov("lookup user by id: realm={0} userId={1}", realm.getId(), id);
         
@@ -149,7 +150,7 @@ public class DBUserStorageProvider implements UserStorageProvider,
     }
     
     @Override
-    public UserModel getUserByUsername(String username, RealmModel realm) {
+    public UserModel getUserByUsername(RealmModel realm, String username) {
         
         log.infov("lookup user by username: realm={0} username={1}", realm.getId(), username);
         
@@ -157,13 +158,13 @@ public class DBUserStorageProvider implements UserStorageProvider,
     }
     
     @Override
-    public UserModel getUserByEmail(String email, RealmModel realm) {
+    public UserModel getUserByEmail(RealmModel realm, String email) {
         
         log.infov("lookup user by username: realm={0} email={1}", realm.getId(), email);
         
-        return getUserByUsername(email, realm);
+        return getUserByUsername( realm, email);
     }
-    
+
     @Override
     public int getUsersCount(RealmModel realm) {
         return repository.getUsersCount(null);
@@ -200,64 +201,33 @@ public class DBUserStorageProvider implements UserStorageProvider,
     }
     
     @Override
-    public List<UserModel> getUsers(RealmModel realm) {
-        log.infov("list users: realm={0}", realm.getId());
-        return internalSearchForUser(null, realm, null);
-    }
-    
-    @Override
-    public List<UserModel> getUsers(RealmModel realm, int firstResult, int maxResults) {
-        
-        log.infov("list users: realm={0} firstResult={1} maxResults={2}", realm.getId(), firstResult, maxResults);
-        return internalSearchForUser(null, realm, new PagingUtil.Pageable(firstResult, maxResults));
-    }
-    
-    @Override
-    public List<UserModel> searchForUser(String search, RealmModel realm) {
-        log.infov("search for users: realm={0} search={1}", realm.getId(), search);
-        return internalSearchForUser(search, realm, null);
-    }
-    
-    @Override
-    public List<UserModel> searchForUser(String search, RealmModel realm, int firstResult, int maxResults) {
-        log.infov("search for users: realm={0} search={1} firstResult={2} maxResults={3}", realm.getId(), search, firstResult, maxResults);
-        return internalSearchForUser(search, realm, new PagingUtil.Pageable(firstResult, maxResults));
-    }
-    
-    @Override
-    public List<UserModel> searchForUser(Map<String, String> params, RealmModel realm) {
+    public Stream<UserModel> searchForUserStream(RealmModel realm, Map<String, String> params) {
         log.infov("search for users with params: realm={0} params={1}", realm.getId(), params);
-        return internalSearchForUser(params.values().stream().findFirst().orElse(null), realm, null);
+        return internalSearchForUser(params.get("keycloak.session.realm.users.query.search"), realm, null);
     }
     
-    private List<UserModel> internalSearchForUser(String search, RealmModel realm, PagingUtil.Pageable pageable) {
+    private Stream<UserModel> internalSearchForUser(String search, RealmModel realm, PagingUtil.Pageable pageable) {
         return toUserModel(realm, repository.findUsers(search, pageable));
     }
     
     @Override
-    public List<UserModel> searchForUser(Map<String, String> params, RealmModel realm, int firstResult, int maxResults) {
+    public Stream<UserModel> searchForUserStream(RealmModel realm, Map<String, String> params, Integer firstResult, Integer  maxResults) {
         log.infov("search for users with params: realm={0} params={1} firstResult={2} maxResults={3}", realm.getId(), params, firstResult, maxResults);
-        return internalSearchForUser(params.values().stream().findFirst().orElse(null), realm, new PagingUtil.Pageable(firstResult, maxResults));
+        return internalSearchForUser(params.get("keycloak.session.realm.users.query.search"), realm, new PagingUtil.Pageable(firstResult, maxResults));
     }
+
     
     @Override
-    public List<UserModel> getGroupMembers(RealmModel realm, GroupModel group, int firstResult, int maxResults) {
-        log.infov("search for group members with params: realm={0} groupId={1} firstResult={2} maxResults={3}", realm.getId(), group.getId(), firstResult, maxResults);
-        return Collections.emptyList();
+    public Stream<UserModel>  getGroupMembersStream(RealmModel realm, GroupModel group, Integer firstResult, Integer maxResults) {
+        log.infov("search for group members: realm={0} groupId={1} firstResult={2} maxResults={3}", realm.getId(), group.getId(), firstResult, maxResults);
+        return Stream.empty();
     }
-    
+
     @Override
-    public List<UserModel> getGroupMembers(RealmModel realm, GroupModel group) {
-        log.infov("search for group members: realm={0} groupId={1} firstResult={2} maxResults={3}", realm.getId(), group.getId());
-        return Collections.emptyList();
-    }
-    
-    @Override
-    public List<UserModel> searchForUserByUserAttribute(String attrName, String attrValue, RealmModel realm) {
+    public Stream<UserModel> searchForUserByUserAttributeStream(RealmModel realm, String attrName, String attrValue){
         log.infov("search for group members: realm={0} attrName={1} attrValue={2}", realm.getId(), attrName, attrValue);
-        return Collections.emptyList();
+        return Stream.empty();
     }
-    
     
     @Override
     public UserModel addUser(RealmModel realm, String username) {
